@@ -147,5 +147,52 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  
+  /* 波浪线高亮样式 */
+  .wavy-underline {
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+    background: transparent !important;
+  }
+  
+  .wavy-underline-red {
+    text-decoration-color: #ef4444;
+  }
+  
+  .wavy-underline-yellow {
+    text-decoration-color: #eab308;
+  }
+  
+  .wavy-underline-blue {
+    text-decoration-color: #3b82f6;
+  }
+  
+  .wavy-underline-orange {
+    text-decoration-color: #f97316;
+  }
+  
+  .wavy-underline-purple {
+    text-decoration-color: #a855f7;
+  }
+  
+  .wavy-underline-pink {
+    text-decoration-color: #ec4899;
+  }
+  
+  /* 高亮背景样式 */
+  .highlight-bg {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-radius: 2px;
+    padding: 0 2px;
+  }
+  
+  .highlight-bg-active {
+    background-color: rgba(59, 130, 246, 0.4);
+    border-radius: 2px;
+    padding: 0 2px;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.6);
+  }
 }
 

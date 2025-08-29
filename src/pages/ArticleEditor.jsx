@@ -13,12 +13,26 @@ const ArticleEditor = () => {
   const [title, setTitle] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [highlightedRanges, setHighlightedRanges] = useState([]);
+  const [activeHighlightId, setActiveHighlightId] = useState(null);
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
+  const [panelSizes, setPanelSizes] = useState([60, 40]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     loadArticle();
+    loadPanelSizes();
   }, [id]);
+
+  // 同步高亮：当建议或内容变化时，重新计算波浪线区段
+  useEffect(() => {
+    if (suggestions && suggestions.length > 0) {
+      generateHighlights(suggestions);
+    } else {
+      setHighlightedRanges([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestions, content]);
 
   const loadArticle = () => {
     const savedArticles = JSON.parse(localStorage.getItem('articles') || '[]');
@@ -32,6 +46,28 @@ const ArticleEditor = () => {
     } else {
       toast.error('文章不存在');
       navigate('/writing');
+    }
+  };
+
+  const loadPanelSizes = () => {
+    const savedSizes = localStorage.getItem('articleEditorPanelSizes');
+    if (savedSizes) {
+      try {
+        const parsedSizes = JSON.parse(savedSizes);
+        if (Array.isArray(parsedSizes) && parsedSizes.length === 2) {
+          setPanelSizes(parsedSizes);
+        }
+      } catch (error) {
+        console.error('Error loading panel sizes:', error);
+      }
+    }
+  };
+
+  const savePanelSizes = (sizes) => {
+    try {
+      localStorage.setItem('articleEditorPanelSizes', JSON.stringify(sizes));
+    } catch (error) {
+      console.error('Error saving panel sizes:', error);
     }
   };
 
@@ -245,19 +281,20 @@ const ArticleEditor = () => {
         let index = content.indexOf(suggestion.original);
         while (index !== -1) {
           highlights.push({
-            id: suggestion.id,
+            id: `${suggestion.id}-${index}`,
             start: index,
             end: index + suggestion.original.length,
             type: suggestion.type,
             color: getColorForType(suggestion.type),
-            suggestionId: suggestion.id
+            suggestionId: suggestion.id,
+            original: suggestion.original
           });
           index = content.indexOf(suggestion.original, index + 1);
         }
       }
     });
     
-    setHighlightedRanges(highlights);
+        setHighlightedRanges(highlights);
   };
 
   const getColorForType = (type) => {
@@ -270,6 +307,62 @@ const ArticleEditor = () => {
       '名词单复数错误': 'bg-pink-200'
     };
     return colors[type] || 'bg-gray-200';
+  };
+
+  const getWavyClassForType = (type) => {
+    const wavyClasses = {
+      '拼写错误': 'wavy-underline-red',
+      '语法错误': 'wavy-underline-yellow',
+      '不地道表达': 'wavy-underline-blue',
+      '时态不一致': 'wavy-underline-orange',
+      '主谓不一致': 'wavy-underline-purple',
+      '名词单复数错误': 'wavy-underline-pink'
+    };
+    return wavyClasses[type] || 'wavy-underline-blue';
+  };
+
+  const getWavyColorForType = (type) => {
+    const wavyColors = {
+      '拼写错误': '#ef4444',
+      '语法错误': '#eab308',
+      '不地道表达': '#3b82f6',
+      '时态不一致': '#f97316',
+      '主谓不一致': '#a855f7',
+      '名词单复数错误': '#ec4899'
+    };
+    return wavyColors[type] || '#3b82f6';
+  };
+
+  const handleHighlightClick = (suggestionId) => {
+    setActiveHighlightId(suggestionId);
+    
+    // 找到对应的建议并滚动到视图中
+    const suggestionElement = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
+    if (suggestionElement) {
+      suggestionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      suggestionElement.classList.add('ring-2', 'ring-blue-500');
+      setTimeout(() => {
+        suggestionElement.classList.remove('ring-2', 'ring-blue-500');
+      }, 2000);
+    }
+  };
+
+  const handleSuggestionClick = (suggestionId) => {
+    setActiveHighlightId(suggestionId);
+    
+    // 滚动左侧编辑器到对应文本位置（同步 overlay 与 textarea）
+    const highlightElements = document.querySelectorAll(`[data-highlight-id="${suggestionId}"]`);
+    if (highlightElements.length > 0) {
+      const el = highlightElements[0];
+      const overlay = el.closest('.editor-overlay');
+      const textarea = document.querySelector('.editor-textarea');
+      if (overlay && textarea) {
+        const targetTop = Math.max(el.offsetTop - 60, 0);
+        textarea.scrollTo({ top: targetTop, behavior: 'smooth' });
+        // 同步 overlay 的滚动
+        overlay.scrollTop = targetTop;
+      }
+    }
   };
 
   const applySuggestion = (suggestionId) => {
@@ -310,7 +403,7 @@ const ArticleEditor = () => {
     toast.success('建议已忽略');
   };
 
-  const HighlightedEditor = ({ value, onChange, highlights }) => {
+  const HighlightedEditor = ({ value, onChange, highlights, activeHighlightId, onHighlightClick, getWavyClassForType, isEditorFocused, setIsEditorFocused }) => {
     const textareaRef = useRef(null);
     const overlayRef = useRef(null);
 
@@ -325,88 +418,99 @@ const ArticleEditor = () => {
       }
     };
 
-    // 计算文本在textarea中的位置
-    const calculateHighlightPosition = (text, highlight) => {
-      if (!textareaRef.current) return null;
-
-      const textarea = textareaRef.current;
-      const lines = text.split('\n');
-      const beforeHighlight = text.substring(0, highlight.start);
-      const beforeLines = beforeHighlight.split('\n');
-      const currentLineIndex = beforeLines.length - 1;
-      const currentLine = beforeLines[beforeLines.length - 1] || '';
-      
-      // 计算行位置
-      const lineHeight = 20; // 近似行高
-      const top = currentLineIndex * lineHeight;
-      
-      // 计算列位置（简化计算）
-      const charWidth = 8; // 近似字符宽度
-      const left = currentLine.length * charWidth;
-      
-      // 计算高亮宽度
-      const highlightWidth = (highlight.end - highlight.start) * charWidth;
-      
-      return {
-        top: top + 4, // 加上padding
-        left: left + 16, // 加上padding
-        width: highlightWidth,
-        height: lineHeight,
-      };
+    const handleFocus = () => {
+      setIsEditorFocused(true);
     };
 
-    const renderHighlights = () => {
-      if (highlights.length === 0) return null;
+    const handleBlur = () => {
+      setIsEditorFocused(false);
+    };
 
-      return (
-        <div
-          ref={overlayRef}
-          className="absolute inset-0 pointer-events-none p-4 overflow-hidden"
-          style={{ lineHeight: '20px' }}
-        >
-          {highlights.map((highlight) => {
-            const position = calculateHighlightPosition(value, highlight);
-            if (!position) return null;
+    // 构建镜像文本层内容：为所有建议原文添加波浪线，选中时增加背景高亮
+    const buildOverlayContent = () => {
+      if (!value) return [<span key="empty" style={{ color: 'transparent' }}>{' '}</span>];
 
-            return (
-              <div
-                key={highlight.id}
-                className={`absolute ${highlight.color} opacity-60 rounded-sm cursor-pointer hover:opacity-80 transition-opacity`}
-                style={{
-                  top: position.top,
-                  left: position.left,
-                  width: position.width,
-                  height: position.height,
-                }}
-                title={`${highlight.type}: ${highlight.original}`}
-                onClick={() => {
-                  // 找到对应的建议并滚动到视图中
-                  const suggestionElement = document.querySelector(`[data-suggestion-id="${highlight.suggestionId}"]`);
-                  if (suggestionElement) {
-                    suggestionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    suggestionElement.classList.add('ring-2', 'ring-blue-500');
-                    setTimeout(() => {
-                      suggestionElement.classList.remove('ring-2', 'ring-blue-500');
-                    }, 2000);
-                  }
-                }}
-              />
-            );
-          })}
-        </div>
-      );
+      // 按开始位置排序，并简单跳过重叠区域，保证渲染稳定
+      const sorted = [...highlights]
+        .sort((a, b) => a.start - b.start)
+        .filter(h => h.start >= 0 && h.end > h.start && h.end <= value.length);
+
+      const nodes = [];
+      let cursor = 0;
+
+      const pushPlain = (text, key) => {
+        if (!text) return;
+        nodes.push(
+          <span key={key} style={{ color: 'transparent' }}>{text}</span>
+        );
+      };
+
+      sorted.forEach((h, idx) => {
+        if (h.start < cursor) {
+          // 与上一个高亮重叠，跳过以避免嵌套复杂度
+          return;
+        }
+        pushPlain(value.slice(cursor, h.start), `plain-${idx}-${cursor}`);
+
+        const isActive = activeHighlightId === h.suggestionId;
+        const wavyClass = `${getWavyClassForType(h.type)} wavy-underline`;
+
+        nodes.push(
+          <span
+            key={`hl-${h.id}`}
+            className={wavyClass}
+            title={`${h.type}: ${h.original}`}
+            data-highlight-id={h.suggestionId}
+            // pointer-events 设为 none，避免阻塞 textarea 操作；点击高亮可选
+            style={{
+              // 仅显示装饰线，不显示文本本身
+              color: 'transparent',
+              // 选中时提供背景增强可视性
+              backgroundColor: isActive ? 'rgba(59,130,246,0.35)' : 'transparent',
+              boxShadow: isActive ? '0 0 0 2px rgba(59,130,246,0.5)' : 'none',
+              pointerEvents: 'auto',
+            }}
+            onClick={(e) => {
+              // 默认 pointer-events:none 不会触发，这里保留逻辑以备将来开启
+              if (onHighlightClick) onHighlightClick(h.suggestionId);
+              e.stopPropagation();
+            }}
+          >
+            {value.slice(h.start, h.end)}
+          </span>
+        );
+
+        cursor = h.end;
+      });
+
+      pushPlain(value.slice(cursor), `plain-tail-${cursor}`);
+      return nodes;
     };
 
     return (
-      <div className="relative bg-white rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent h-full overflow-hidden">
-        {renderHighlights()}
+      <div className={`relative bg-white rounded-xl border-2 transition-all duration-200 h-full overflow-hidden ${
+        isEditorFocused 
+          ? 'border-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.2)]' 
+          : 'border-gray-200'
+      }`}>
+        {/* 镜像文本层：与 textarea 同字形/排版，渲染波浪线与高亮 */}
+        <div
+          ref={overlayRef}
+          className="editor-overlay absolute inset-0 overflow-auto p-6 whitespace-pre-wrap leading-relaxed text-base custom-scrollbar"
+          style={{ pointerEvents: 'none' }}
+        >
+          {buildOverlayContent()}
+        </div>
+
         <textarea
           ref={textareaRef}
           value={value}
           onChange={handleChange}
           onScroll={handleScroll}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder="开始写作您的英语文章..."
-          className="w-full h-full p-6 border-none resize-none focus:outline-none bg-transparent relative z-10 rounded-xl text-base leading-relaxed overflow-y-auto overflow-x-hidden custom-scrollbar"
+          className="editor-textarea w-full h-full p-6 border-none resize-none focus:outline-none bg-transparent relative z-10 rounded-xl text-base leading-relaxed overflow-y-auto overflow-x-hidden custom-scrollbar"
         />
       </div>
     );
@@ -505,8 +609,8 @@ const ArticleEditor = () => {
 
           {/* 编辑区域 */}
           <div className="flex-1 min-h-0">
-            <PanelGroup direction="horizontal">
-              <Panel defaultSize={60} minSize={30}>
+            <PanelGroup direction="horizontal" onLayout={savePanelSizes}>
+              <Panel defaultSize={panelSizes[0]} minSize={30}>
                 <div className="h-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 mr-2 flex flex-col">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2 flex-shrink-0">
                     <PenTool size={20} />
@@ -518,6 +622,11 @@ const ArticleEditor = () => {
                       value={content}
                       onChange={setContent}
                       highlights={highlightedRanges}
+                      activeHighlightId={activeHighlightId}
+                      onHighlightClick={handleHighlightClick}
+                      getWavyClassForType={getWavyClassForType}
+                      isEditorFocused={isEditorFocused}
+                      setIsEditorFocused={setIsEditorFocused}
                     />
                   </div>
                 </div>
@@ -525,7 +634,7 @@ const ArticleEditor = () => {
               
               <PanelResizeHandle className="w-2 bg-gray-300 hover:bg-gray-400 transition-colors rounded-lg flex-shrink-0" />
               
-              <Panel defaultSize={40} minSize={30}>
+              <Panel defaultSize={panelSizes[1]} minSize={30}>
                 <div className="h-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 ml-2 flex flex-col">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2 flex-shrink-0">
                     <Sparkles size={20} />
@@ -543,9 +652,11 @@ const ArticleEditor = () => {
                         <div
                           key={suggestion.id}
                           data-suggestion-id={suggestion.id}
-                          className={`p-4 rounded-xl border-l-4 transition-all duration-200 shadow-sm hover:shadow-md ${
+                          onClick={() => handleSuggestionClick(suggestion.id)}
+                          className={`p-4 rounded-xl border-l-4 transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer ${
                             suggestion.status === 'accepted' ? 'border-green-500 bg-green-50 shadow-green-100' :
                             suggestion.status === 'rejected' ? 'border-gray-300 bg-gray-50 opacity-50' :
+                            activeHighlightId === suggestion.id ? 'border-blue-500 bg-blue-100 ring-2 ring-blue-300' :
                             'border-blue-500 bg-blue-50 hover:bg-blue-100'
                           }`}
                         >
