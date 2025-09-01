@@ -55,11 +55,13 @@ const SettingsModal = ({ isOpen, onClose }) => {
               placeholder="请输入 API 密钥"
             />
           </div>
-          <div className="space-y-2">
+      <div className="space-y-2">
             <Label htmlFor="model">AI 模型</Label>
             <ModelSelector 
               value={selectedModel} 
-              onValueChange={setSelectedModel} 
+        onValueChange={setSelectedModel}
+        apiKey={apiKey}
+        apiUrl={apiUrl}
             />
           </div>
           <div className="pt-4 border-t">

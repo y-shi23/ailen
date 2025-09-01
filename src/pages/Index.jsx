@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import SettingsModal from '@/components/SettingsModal';
 import { PenTool, MessageCircle, Star, Search, BookOpen, Settings } from 'lucide-react';
+import { SYSTEM_PROMPT } from '@/lib/dictionaryPrompt';
 import React, { useEffect, useState } from 'react';
 const Index = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,69 +75,7 @@ const Index = () => {
         return;
       }
 
-  // 系统提示词（必须与需求完全一致）
-  const SYSTEM_PROMPT = `- Output Format (for English input):
-
-[Headword] /[Phonetic Transcription]/ ([Key Inflections])
-[Part of Speech Abbr.]. [Brief Definition 1]; [Brief Definition 2]; [Brief Definition 3] ...
-[Part of Speech Abbr.]. [Brief Definition 1]; [Brief Definition 2]; [Brief Definition 3] ...
-[ [Full list of inflected forms, e.g., Plural, 3rd person singular, Present participle, Past tense, Past participle] ]
-
-1.
-[Grammatical Label, e.g., V-T, N-COUNT] [Detailed definition or explanation of the meaning.]
-例：
-[Example sentence using the word in this context.]
-[Translation of the example sentence.]
-
-2.
-[Grammatical Label] [Detailed definition or explanation of the meaning.]
-例：
-[Example sentence using the word in this context.]
-[Translation of the example sentence.]
-
-3.
-...
-
-- Output Example (for English input): 
-
-test /tɛst/  ( testing, tested, tests )
-n. （书面或口头的）测验，考试；（医疗上的）检查，化验，检验；（对机器或武器等的）试验，检验；（对水、土壤、空气等的）检测，检验；（衡量能力或技能等的）测试，考验；医疗检查设备；化验结果；（常指板球、橄榄球的）国际锦标赛（Test）；准则，标准；（冶）烤钵，灰皿；（一些无脊椎动物和原生动物的）甲壳
-v. 试验，测试；测验，考查（熟练程度，知识）；检测，检验（质量或含量）；检查（身体），（用试剂）化验；考验；尝，（触）试
-[ 复数 tests 第三人称单数 tests 现在分词 testing 过去式 tested 过去分词 tested ]
-1. 
-V-T When you test something, you try it, for example, by touching it or using it for a short time, in order to find out what it is, what condition it is in, or how well it works. 试验
-例：
-Either measure the temperature with a thermometer or test the water with your wrist.
-要么用温度计测量水温，要么用你的手腕来试水温。
-
-2. 
-N-COUNT A test is a deliberate action or experiment to find out how well something works. 试验
-例：
-...the banning of nuclear tests.
-…对核试验的禁止。
-
-3. 
-V-T If you test someone, you ask them questions or tell them to perform certain actions in order to find out how much they know about a subject or how well they are able to do something. 测试
-例：
-There was a time when each teacher spent an hour, one day a week, testing students in every subject.
-曾有一段时间，每个老师每周都花一小时来测验学生的各门功课。
-
-4.
-...
-
-- Output Format (for Chinese input):
-
-[Headword]
-[Brief Definition 1]; [Brief Definition 2]; [Brief Definition 3] ...
-
-- Output Example (for Chinese input): 
-
-测试
-test; measurement
-
--------------
-Output the dictionary text for the word according to the given format. Reply only "Error" if the input is not a single word or phrase.
-RESPOND ONLY WITH THE DICTIONARY TEXT.`;
+  // 使用共享系统提示词
 
       // 调用AI API
   const baseUrl = apiUrl.replace(/\/$/, '');
@@ -170,20 +109,21 @@ RESPOND ONLY WITH THE DICTIONARY TEXT.`;
       }
 
       const data = await response.json();
-      const aiResponse = data.choices[0].message.content.trim();
+      const aiResponse = (data.choices?.[0]?.message?.content || '').trim();
+      const isEmpty = !aiResponse || aiResponse.toLowerCase() === 'error';
       
       console.log('AI Response:', aiResponse); // 调试信息
       
-  // 直接使用AI返回的字典文本
+  // 直接使用AI返回的字典文本（若为空则不缓存，仅显示占位/错误）
   const newWordData = { rawText: aiResponse, word: term };
   setWordData(newWordData);
-  
-  // 缓存到本地存储
-  const updatedCachedWords = {
-    ...cachedWords,
-    [term]: newWordData
-  };
-  localStorage.setItem('cachedWords', JSON.stringify(updatedCachedWords));
+  if (!isEmpty) {
+    const updatedCachedWords = {
+      ...cachedWords,
+      [term]: newWordData
+    };
+    localStorage.setItem('cachedWords', JSON.stringify(updatedCachedWords));
+  }
     } catch (error) {
       console.error('API调用错误:', error);
       toast.error('获取单词信息失败: ' + (error.message || '未知错误'));
@@ -193,7 +133,7 @@ RESPOND ONLY WITH THE DICTIONARY TEXT.`;
       const mockRaw = isChinese
         ? `${term}\n定义1; 定义2`
         : `${term} /tɛst/ ( testing, tested, tests )\nn. brief def1; brief def2\n[ 复数 tests 第三人称单数 tests 现在分词 testing 过去式 tested 过去分词 tested ]\n1.\nV-T Detailed definition.\n例：\nExample sentence.\n示例翻译。`;
-      setWordData({ rawText: mockRaw, word: term });
+  setWordData({ rawText: mockRaw, word: term });
     } finally {
       setIsLoading(false);
     }
@@ -293,7 +233,11 @@ RESPOND ONLY WITH THE DICTIONARY TEXT.`;
           <Settings className="text-gray-600" size={20} />
         </button>
         
-        <div className="w-full max-w-4xl flex flex-col items-center mx-auto" style={{ width: '80%', paddingTop: '15%' }}>
+        <motion.div
+          layout
+          className={`w-full max-w-4xl flex flex-col items-center mx-auto ${ (wordData || isLoading) ? 'pt-6' : 'pt-[15%]' }`}
+          style={{ width: '80%' }}
+        >
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -331,38 +275,38 @@ RESPOND ONLY WITH THE DICTIONARY TEXT.`;
             </div>
           </motion.form>
           
-          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex justify-center pt-8 px-4">
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex justify-center pt-8 px-4 pb-16">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="w-full max-w-6xl mx-auto"
-              style={{ width: '80%' }}
             >
               {wordData && (
-                <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-xl p-8 w-full border border-white/40 relative">
+                <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-xl max-w-3xl w-full border border-white/40 relative flex flex-col max-h-[70vh] mx-auto">
                   {/* 收藏按钮 */}
                   <button 
                     onClick={toggleFavorite}
-                    className="absolute top-4 right-4 text-yellow-400 hover:text-yellow-500 transition-colors"
+                    className="absolute top-4 right-4 text-yellow-400 hover:text-yellow-500 transition-colors z-10"
                   >
                     <Star 
                       fill={favorites[wordData.word] ? "currentColor" : "none"} 
                       size={24} 
                     />
                   </button>
-                  
-                  <WordDetail wordData={wordData} onWordDataUpdate={handleWordDataUpdate} />
+                  <div className="overflow-y-auto p-8 custom-scrollbar no-scrollbar">
+                    <WordDetail wordData={wordData} onWordDataUpdate={handleWordDataUpdate} />
+                  </div>
                 </div>
               )}
               
               {isLoading && (
-                <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-8 w-full flex justify-center">
+                <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-8 w-full max-w-3xl mx-auto flex justify-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                 </div>
               )}
             </motion.div>
           </div>
-        </div>
+  </motion.div>
       </div>
     </div>
   );
