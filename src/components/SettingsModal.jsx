@@ -62,11 +62,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>AI 设置</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="overflow-y-auto flex-1 pr-0 space-y-4 no-scrollbar">
           <div className="space-y-2">
             <Label htmlFor="apiUrl">API URL（需包含 /v1）</Label>
             <Input
@@ -174,7 +174,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
               </div>
             </div>
           </div>
-
+        </div>
+        <div className="pt-4 border-t">
           <Button onClick={handleSave} className="w-full">保存设置</Button>
         </div>
       </DialogContent>

@@ -99,23 +99,22 @@
 
 /* 自定义滚动条样式 - 更细致的控制 */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 4px;
-  margin: 4px 0;
+  background: transparent;
+  margin: 0;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(59, 130, 246, 0.3);
-  border-radius: 4px;
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 3px;
   transition: all 0.2s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(59, 130, 246, 0.5);
+  background: rgba(156, 163, 175, 0.5);
 }
 
 .custom-scrollbar::-webkit-scrollbar-corner {
