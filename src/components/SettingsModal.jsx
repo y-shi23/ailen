@@ -15,11 +15,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const [sttApiUrl, setSttApiUrl] = useState(localStorage.getItem('sttApiUrl') || 'https://api.groq.com/openai');
   const [sttApiKey, setSttApiKey] = useState(localStorage.getItem('sttApiKey') || '');
   const [sttModel, setSttModel] = useState(localStorage.getItem('sttModel') || '');
-  // TTS: OpenAI 配置
-  const [ttsApiUrl, setTtsApiUrl] = useState(import.meta.env.VITE_OPENAI_API_URL || 'https://api.openai.com/v1');
-  const [ttsApiKey, setTtsApiKey] = useState(import.meta.env.VITE_OPENAI_API_KEY || '');
-  const [ttsModel, setTtsModel] = useState(import.meta.env.VITE_TTS_MODEL || 'tts-1');
-  const [ttsVoice, setTtsVoice] = useState(import.meta.env.VITE_TTS_VOICE || 'alloy');
+  // TTS: 用户自定义配置（不显示内置配置）
+  const [ttsApiUrl, setTtsApiUrl] = useState(localStorage.getItem('userTtsApiUrl') || '');
+  const [ttsApiKey, setTtsApiKey] = useState(localStorage.getItem('userTtsApiKey') || '');
+  const [ttsModel, setTtsModel] = useState(localStorage.getItem('userTtsModel') || '');
+  const [ttsVoice, setTtsVoice] = useState(localStorage.getItem('userTtsVoice') || '');
 
   const handleSave = () => {
     localStorage.setItem('apiUrl', apiUrl);
@@ -29,19 +29,30 @@ const SettingsModal = ({ isOpen, onClose }) => {
   localStorage.setItem('sttApiUrl', sttApiUrl);
   localStorage.setItem('sttApiKey', sttApiKey);
   localStorage.setItem('sttModel', sttModel);
-  // TTS 保存
-    localStorage.setItem('ttsApiUrl', ttsApiUrl);
-    localStorage.setItem('ttsApiKey', ttsApiKey);
-    localStorage.setItem('ttsModel', ttsModel);
-    localStorage.setItem('ttsVoice', ttsVoice);
-    
-    // 更新TTS服务配置
-    ttsService.updateConfig({
-      apiUrl: ttsApiUrl,
-      apiKey: ttsApiKey,
-      model: ttsModel,
-      voice: ttsVoice
-    });
+  // TTS 保存（只保存用户配置）
+    if (ttsApiKey) {
+      localStorage.setItem('userTtsApiUrl', ttsApiUrl);
+      localStorage.setItem('userTtsApiKey', ttsApiKey);
+      localStorage.setItem('userTtsModel', ttsModel);
+      localStorage.setItem('userTtsVoice', ttsVoice);
+      
+      // 更新TTS服务配置
+      ttsService.updateUserConfig({
+        apiUrl: ttsApiUrl,
+        apiKey: ttsApiKey,
+        model: ttsModel,
+        voice: ttsVoice
+      });
+    } else {
+      // 如果清除了API密钥，则删除用户配置
+      localStorage.removeItem('userTtsApiUrl');
+      localStorage.removeItem('userTtsApiKey');
+      localStorage.removeItem('userTtsModel');
+      localStorage.removeItem('userTtsVoice');
+      
+      // 清除TTS服务的用户配置
+      ttsService.clearUserConfig();
+    }
     
     // 触发storage事件以便ModelSelector重新获取模型列表
     window.dispatchEvent(new Event('storage'));
@@ -119,6 +130,9 @@ const SettingsModal = ({ isOpen, onClose }) => {
           
           <div className="pt-4 border-t">
             <h3 className="text-sm font-semibold mb-2">语音合成（TTS）</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              应用内置了TTS服务（如有）。您可以在此配置自定义TTS服务，留空则使用内置服务或浏览器语音。
+            </p>
             <div className="space-y-2 mb-3">
               <Label htmlFor="ttsApiUrl">TTS API 基址</Label>
               <Input
