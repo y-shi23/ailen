@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PenTool, Volume2, User, MicOff, Star, Bot, Mic, Search, BookOpen, Send, List, Plus, Trash2 } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import React, { useRef, useEffect, useState } from 'react';
+import ttsService from '@/services/ttsService';
 const AIChat = () => {
   const [messages, setMessages] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -13,6 +14,7 @@ const AIChat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [ttsServiceStatus, setTtsServiceStatus] = useState('checking'); // checking, openai, browser
   const [recognition, setRecognition] = useState(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const messagesEndRef = useRef(null);
@@ -129,7 +131,16 @@ const AIChat = () => {
     });
   };
 
-  // 初始化载入会话
+  // 初始化TTS服务
+  useEffect(() => {
+    const checkTTS = async () => {
+      const isOpenAIAvailable = await ttsService.checkOpenAIAvailability();
+      setTtsServiceStatus(isOpenAIAvailable ? 'openai' : 'browser');
+      console.log(`TTS service initialized: ${isOpenAIAvailable ? 'OpenAI' : 'Browser Speech API'}`);
+    };
+    
+    checkTTS();
+  }, []);
   useEffect(() => {
     const list = loadSessions();
     if (list.length === 0) {
@@ -366,54 +377,45 @@ const AIChat = () => {
   };
 
   // 播放文本语音
-  const playTextToSpeech = (text) => {
-    if ('speechSynthesis' in window) {
-      // 如果已经在对话模式，先停止语音识别
-      if (isConversationModeRef.current && recognition && isListening) {
-        recognition.stop();
-        stopSilenceDetection();
+  const playTextToSpeech = async (text) => {
+    // 如果已经在对话模式，先停止语音识别
+    if (isConversationModeRef.current && recognition && isListening) {
+      recognition.stop();
+      stopSilenceDetection();
+    }
+    
+    // 停止当前语音
+    ttsService.stop();
+    setIsAISpeaking(true);
+    
+    try {
+      await ttsService.speak(text, {
+        lang: 'en-US',
+        rate: 0.9,
+        pitch: 1,
+        volume: 1
+      });
+    } catch (error) {
+      console.error('TTS error:', error);
+    } finally {
+      setIsAISpeaking(false);
+      // AI语音结束后，如果是对话模式，重新开始监听和静音检测
+      if (isConversationModeRef.current) {
+        setTimeout(() => {
+          if (recognition && !isListening) {
+            recognition.start();
+            startSilenceDetection();
+            setIsListening(true);
+          }
+        }, 500);
       }
-      
-      window.speechSynthesis.cancel(); // 取消之前的语音
-      
-      const speech = new SpeechSynthesisUtterance(text);
-      speech.lang = 'en-US';
-      speech.rate = 0.9;
-      speech.pitch = 1;
-      speech.volume = 1;
-      
-      speech.onstart = () => {
-        setIsAISpeaking(true);
-      };
-      
-      speech.onend = () => {
-        setIsAISpeaking(false);
-        // AI语音结束后，如果是对话模式，重新开始监听和静音检测
-        if (isConversationModeRef.current) {
-          setTimeout(() => {
-            if (recognition && !isListening) {
-              recognition.start();
-              startSilenceDetection();
-              setIsListening(true);
-            }
-          }, 500);
-        }
-      };
-      
-      speech.onerror = () => {
-        setIsAISpeaking(false);
-      };
-      
-      window.speechSynthesis.speak(speech);
     }
   };
 
   // 停止AI语音
   const stopAISpeech = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsAISpeaking(false);
-    }
+    ttsService.stop();
+    setIsAISpeaking(false);
   };
 
   // Groq STT: 将当前录制的音频块上传转写
@@ -898,9 +900,11 @@ Please respond in pure English unless the user explicitly requests Chinese expla
                               className={`absolute -bottom-2 -right-2 rounded-full p-1.5 shadow-md transition-all hover:scale-110 ${
                                 isAISpeaking 
                                   ? 'bg-red-500 text-white animate-pulse' 
+                                  : ttsServiceStatus === 'openai'
+                                  ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
                                   : 'bg-purple-500 text-white hover:bg-purple-600'
                               }`}
-                              title={isAISpeaking ? "Stop speaking" : "Play voice"}
+                              title={isAISpeaking ? "Stop speaking" : ttsServiceStatus === 'openai' ? "Play voice (OpenAI)" : "Play voice (Browser)"}
                             >
                               <Volume2 size={14} />
                             </button>

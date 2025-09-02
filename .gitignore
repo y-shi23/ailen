@@ -3,3 +3,5 @@ package-lock.json
 build
 yarn.lock
 .claude
+.env
+.env.local
